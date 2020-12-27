@@ -20,7 +20,7 @@ package raft
 import (
 	"bytes"
 	"encoding/gob"
-	"fmt"
+	// "fmt"
 	"labrpc"
 	"math/rand"
 	"sync"
@@ -199,13 +199,13 @@ func (rf *Raft) RequestVote(args RequestVoteArgs, reply *RequestVoteReply) {
 	if args.Term < rf.CurrentTerm {
 		reply.Term = rf.CurrentTerm
 		reply.VoteGranted = false
-		fmt.Printf("Raft Server %v votefor %v false.args.Term %v < rf.CurrentTerm %v\n", rf.me, args.CandidateID, args.Term, rf.CurrentTerm)
+		// fmt.Printf("Raft Server %v votefor %v false.args.Term %v < rf.CurrentTerm %v\n", rf.me, args.CandidateID, args.Term, rf.CurrentTerm)
 		return
 	}
 	if args.Term == rf.CurrentTerm && rf.State == LEADER_STATE {
 		reply.Term = rf.CurrentTerm
 		reply.VoteGranted = false
-		fmt.Printf("Raft Server %v votefor %v false for rf.State==Leader.\n", rf.me, args.CandidateID)
+		// fmt.Printf("Raft Server %v votefor %v false for rf.State==Leader.\n", rf.me, args.CandidateID)
 		return
 	}
 	if args.Term > rf.CurrentTerm {
@@ -215,27 +215,27 @@ func (rf *Raft) RequestVote(args RequestVoteArgs, reply *RequestVoteReply) {
 		rf.VotedFor = -1
 		rf.persist()
 		if rf.State == CANDIDATE_STATE {
-			fmt.Printf("Server %v candidate -> follower\n", rf.me)
+			// fmt.Printf("Server %v candidate -> follower\n", rf.me)
 			rf.CandidateToFollwer <- 1
-			fmt.Printf("Atfer Server %v candidate -> follower, rf.State = %v\n", rf.me, rf.State)
+			// fmt.Printf("Atfer Server %v candidate -> follower, rf.State = %v\n", rf.me, rf.State)
 
 		}
 		if rf.State == LEADER_STATE {
-			fmt.Printf("Server %v leader -> follower\n", rf.me)
+			// fmt.Printf("Server %v leader -> follower\n", rf.me)
 			rf.LeaderToFollwer <- 1
-			fmt.Printf("Atfer Server %v leader -> follower, rf.State = %v\n", rf.me, rf.State)
+			// fmt.Printf("Atfer Server %v leader -> follower, rf.State = %v\n", rf.me, rf.State)
 		}
 
 	}
 	if (args.LastLogTerm < rf.Log[len(rf.Log)-1].Term) || ((args.LastLogTerm == rf.Log[len(rf.Log)-1].Term) && (args.LastLogIndex < len(rf.Log)-1)) {
 		reply.VoteGranted = false
 		rf.persist()
-		fmt.Printf("Raft Server %v votefor %v false for many.\n", rf.me, args.CandidateID)
+		// fmt.Printf("Raft Server %v votefor %v false for many.\n", rf.me, args.CandidateID)
 	} else if rf.VotedFor == -1 || rf.VotedFor == args.CandidateID {
 		rf.VotedFor = args.CandidateID
 		reply.VoteGranted = true
 		rf.persist()
-		fmt.Printf("Server %v votefor %v success at term %v and Reset 1 TimeoutTimer\n", rf.me, args.CandidateID, rf.CurrentTerm)
+		// fmt.Printf("Server %v votefor %v success at term %v and Reset 1 TimeoutTimer\n", rf.me, args.CandidateID, rf.CurrentTerm)
 		rf.TimeoutTimer.Reset(TimeoutTimerRandTime())
 	}
 	// Your code here.
@@ -385,7 +385,7 @@ func (rf *Raft) Start(command interface{}) (int, int, bool) {
 // turn off debug output from this instance.
 //
 func (rf *Raft) Kill() {
-	fmt.Printf("Server %v shut down.\n", rf.me)
+	// fmt.Printf("Server %v shut down.\n", rf.me)
 	// rf.ServerKill <- 1
 	return
 	// Your code here, if desired.
@@ -469,7 +469,7 @@ func RaftServerCommit(rf *Raft, applyCh chan ApplyMsg) {
 				applyCh <- msg
 				rf.LastApplied = i
 				rf.persist()
-				fmt.Printf("Server %v applyCh sended, msg: %v. LastApplied+1: %v rf.CommintIndex %v\n", rf.me, msg, rf.LastApplied+1, index)
+				// fmt.Printf("Server %v applyCh sended, msg: %v. LastApplied+1: %v rf.CommintIndex %v\n", rf.me, msg, rf.LastApplied+1, index)
 			}
 		}
 	}
@@ -500,7 +500,7 @@ func RaftServer(rf *Raft) {
 
 		case LEADER_STATE:
 			func() {
-				fmt.Printf("Server %v in Leader state, Term = %v\n", rf.me, rf.CurrentTerm)
+				// fmt.Printf("Server %v in Leader state, Term = %v\n", rf.me, rf.CurrentTerm)
 				for {
 					rf.mu.Lock()
 					if len(rf.NextIndex) < serverNum {
@@ -586,7 +586,7 @@ func RaftServer(rf *Raft) {
 								}
 							}
 						case <-rf.LeaderToFollwer:
-							fmt.Printf("Server %v leader -> follower in Term %v\n", rf.me, rf.CurrentTerm)
+							// fmt.Printf("Server %v leader -> follower in Term %v\n", rf.me, rf.CurrentTerm)
 							rf.State = FOLLOWER_STATE
 							rf.VotedFor = -1
 							rf.persist()
@@ -601,7 +601,7 @@ func RaftServer(rf *Raft) {
 				select {
 				case <-rf.TimeoutTimer.C:
 					rf.CurrentTerm++
-					fmt.Printf("Server %v Turn to candidate, term = %v. Reset 3 ReelectionTimer\n", rf.me, rf.CurrentTerm)
+					// fmt.Printf("Server %v Turn to candidate, term = %v. Reset 3 ReelectionTimer\n", rf.me, rf.CurrentTerm)
 					rf.VotedFor = -1
 					rf.State = CANDIDATE_STATE
 					// rf.TimeoutTimer.Reset(TimeoutTimerRandTime())
@@ -613,7 +613,7 @@ func RaftServer(rf *Raft) {
 				}
 			}
 		case CANDIDATE_STATE:
-			fmt.Printf("Server %v in candidate state term %v, totol vote is 1\n", rf.me, rf.CurrentTerm)
+			// fmt.Printf("Server %v in candidate state term %v, totol vote is 1\n", rf.me, rf.CurrentTerm)
 			func() {
 				rf.VotedFor = rf.me
 				vote := 1
@@ -646,7 +646,7 @@ func RaftServer(rf *Raft) {
 						}
 						if reply.VoteGranted {
 							vote += 1
-							fmt.Printf("Server %v in candidate term %v get vote, total vote is %v\n", rf.me, rf.CurrentTerm, vote)
+							// fmt.Printf("Server %v in candidate term %v get vote, total vote is %v\n", rf.me, rf.CurrentTerm, vote)
 							if vote > serverNum/2 {
 								winElection <- 1
 								return
@@ -660,7 +660,7 @@ func RaftServer(rf *Raft) {
 					rf.mu.Lock()
 					rf.State = LEADER_STATE
 					rf.VotedFor = -1
-					fmt.Printf("Server %d become Leader from candidate in Term %d, state %d\n", rf.me, rf.CurrentTerm, rf.State)
+					// fmt.Printf("Server %d become Leader from candidate in Term %d, state %d\n", rf.me, rf.CurrentTerm, rf.State)
 					rf.persist()
 					rf.NextIndex = make([]int, len(rf.peers))
 					rf.MatchIndex = make([]int, len(rf.peers))
@@ -674,14 +674,14 @@ func RaftServer(rf *Raft) {
 					rf.State = FOLLOWER_STATE
 					rf.VotedFor = -1
 					rf.persist()
-					fmt.Printf("Server %d candidate -> follower in Term %d Reset 4 TimeoutTimer\n", rf.me, rf.CurrentTerm)
+					// fmt.Printf("Server %d candidate -> follower in Term %d Reset 4 TimeoutTimer\n", rf.me, rf.CurrentTerm)
 
 					rf.TimeoutTimer.Reset(TimeoutTimerRandTime())
 					return
 				case <-rf.ReelectionTimer.C:
 					rf.CurrentTerm += 1
 					rf.VotedFor = -1
-					fmt.Printf("Server %v Reset 5 ReelectionTimer Term = %v\n", rf.me, rf.CurrentTerm)
+					// fmt.Printf("Server %v Reset 5 ReelectionTimer Term = %v\n", rf.me, rf.CurrentTerm)
 					rf.ReelectionTimer.Reset(REELECTION_TIME * TIME_UNIT)
 					rf.persist()
 					return
