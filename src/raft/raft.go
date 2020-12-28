@@ -94,8 +94,6 @@ type Raft struct {
 	LeaderToFollwer    chan int
 
 	commitChan chan int
-
-	ServerKill chan int
 }
 
 // return CurrentTerm and whether this server
@@ -231,7 +229,8 @@ func (rf *Raft) RequestVote(args RequestVoteArgs, reply *RequestVoteReply) {
 		reply.VoteGranted = false
 		rf.persist()
 		// fmt.Printf("Raft Server %v votefor %v false for many.\n", rf.me, args.CandidateID)
-	} else if rf.VotedFor == -1 || rf.VotedFor == args.CandidateID {
+	// } else if rf.VotedFor == -1 || rf.VotedFor == args.CandidateID {
+	} else if rf.VotedFor == -1 {
 		rf.VotedFor = args.CandidateID
 		reply.VoteGranted = true
 		rf.persist()
@@ -252,27 +251,24 @@ func (rf *Raft) AppendEntries(args AppendEntriesArgs, reply *AppendEntriesReply)
 		reply.NextIndex = len(rf.Log)
 		return
 	}
-	if args.Term > rf.CurrentTerm {
 		// fmt.Printf("Before Server %v(raft) Server %v(args) args.Term(%v) > rf.CurrentTerm(%v).\n", rf.me, args.LeaderID, args.Term, rf.CurrentTerm)
 
+		
+		// fmt.Printf("After Server %v(raft) Server %v(args) args.Term(%v) = rf.CurrentTerm(%v).\n", rf.me, args.LeaderID, args.Term, rf.CurrentTerm)
+	if rf.State == CANDIDATE_STATE && args.Term >= rf.CurrentTerm {
+		rf.State = FOLLOWER_STATE
 		rf.CurrentTerm = args.Term
 		rf.VotedFor = -1
+		rf.CandidateToFollwer <- 1
 		rf.persist()
-		// fmt.Printf("After Server %v(raft) Server %v(args) args.Term(%v) = rf.CurrentTerm(%v).\n", rf.me, args.LeaderID, args.Term, rf.CurrentTerm)
-
-		if rf.State == CANDIDATE_STATE { //todo args.LeaderID != rf.me
-			rf.State = FOLLOWER_STATE
-			rf.CandidateToFollwer <- 1
-			rf.persist()
-		}
-		if rf.State == LEADER_STATE {
-			rf.State = FOLLOWER_STATE
-			rf.CurrentTerm = args.Term
-			rf.VotedFor = -1
-			rf.LeaderToFollwer <- 1
-			rf.persist()
-		}
+	}else if rf.State == LEADER_STATE && args.Term > rf.CurrentTerm{
+		rf.State = FOLLOWER_STATE
+		rf.CurrentTerm = args.Term
+		rf.VotedFor = -1
+		rf.LeaderToFollwer <- 1
+		rf.persist()
 	}
+	
 	// fmt.Printf("Server %v Reset 2 TimeoutTimer\n", rf.me)
 	rf.TimeoutTimer.Reset(TimeoutTimerRandTime())
 	reply.Term = rf.CurrentTerm
@@ -294,7 +290,7 @@ func (rf *Raft) AppendEntries(args AppendEntriesArgs, reply *AppendEntriesReply)
 			rf.Log = append(rf.Log, args.Entries...)
 			rf.persist()
 			reply.Success = true
-			reply.NextIndex = len(rf.Log) //todo
+			reply.NextIndex = len(rf.Log) 
 		} else {
 			localCurrentTerm := rf.CurrentTerm
 			for i := args.PrevLogIndex - 1; i >= 0; i++ {
@@ -429,31 +425,16 @@ func Make(peers []*labrpc.ClientEnd, me int,
 	rf.CandidateToFollwer = make(chan int)
 	rf.LeaderToFollwer = make(chan int)
 	rf.commitChan = make(chan int)
-	rf.ServerKill = make(chan int)
+	// rf.ServerKill = make(chan int)
 
 	rf.TimeoutTimer = time.NewTimer(TimeoutTimerRandTime())
 	rf.ReelectionTimer = time.NewTimer(REELECTION_TIME * TIME_UNIT)
 	// initialize from state persisted before a crash
 	rf.readPersist(persister.ReadRaftState())
+
 	go RaftServerCommit(rf, applyCh)
-	// go func() {
-	// 	for {
-	// 		select {
-	// 		case <-rf.commitChan:
-	// 			// fmt.Printf("Server %v commitChan, rf.CommitIndex = %v.\n", rf.me, rf.CommitIndex)
-	// 			index := rf.CommitIndex
-	// 			for i := rf.LastApplied + 1; i <= index && i < len(rf.Log); i++ {
-	// 				msg := ApplyMsg{Index: i, Command: rf.Log[i].Command}
-	// 				// fmt.Printf("Server %v rf.LastApplied %v. applyMsg : %v\n", rf.me, rf.LastApplied, msg)
-	// 				applyCh <- msg
-	// 				rf.LastApplied = i
-	// 				rf.persist()
-	// 				fmt.Printf("Server %v applyCh sended, msg: %v. LastApplied+1: %v rf.CommintIndex %v\n", rf.me, msg, rf.LastApplied+1, index)
-	// 			}
-	// 		}
-	// 	}
-	// }()
 	go RaftServer(rf)
+
 	return rf
 }
 
@@ -517,11 +498,11 @@ func RaftServer(rf *Raft) {
 					rf.persist()
 					rf.mu.Unlock()
 
-					heartBeatTimer := time.NewTicker(HEARTBEAT_TIME * TIME_UNIT)
-					defer heartBeatTimer.Stop()
+					heartBeatTicker := time.NewTicker(HEARTBEAT_TIME * TIME_UNIT)
+					defer heartBeatTicker.Stop()
 
 					go func() {
-						for _ = range heartBeatTimer.C {
+						for _ = range heartBeatTicker.C {
 							rf.SendHBChan <- 1
 						}
 					}()
@@ -587,8 +568,10 @@ func RaftServer(rf *Raft) {
 							}
 						case <-rf.LeaderToFollwer:
 							// fmt.Printf("Server %v leader -> follower in Term %v\n", rf.me, rf.CurrentTerm)
+							rf.mu.Lock()
 							rf.State = FOLLOWER_STATE
 							rf.VotedFor = -1
+							rf.mu.Unlock()
 							rf.persist()
 							return
 						}
@@ -641,7 +624,7 @@ func RaftServer(rf *Raft) {
 							rf.VotedFor = -1
 							rf.CurrentTerm = reply.Term
 							rf.persist()
-							rf.CandidateToFollwer <- 1 //todo
+							rf.CandidateToFollwer <- 1 
 							return
 						}
 						if reply.VoteGranted {
@@ -671,8 +654,10 @@ func RaftServer(rf *Raft) {
 					rf.mu.Unlock()
 					return
 				case <-rf.CandidateToFollwer:
+					rf.mu.Lock()
 					rf.State = FOLLOWER_STATE
 					rf.VotedFor = -1
+					rf.mu.Unlock()
 					rf.persist()
 					// fmt.Printf("Server %d candidate -> follower in Term %d Reset 4 TimeoutTimer\n", rf.me, rf.CurrentTerm)
 
