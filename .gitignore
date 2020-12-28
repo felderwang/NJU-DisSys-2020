@@ -24,6 +24,6 @@ _testmain.go
 *.prof
 
 .idea/
-report/
+reports/
 bin/
 pkg/
